@@ -19,8 +19,7 @@ namespace Email
             InitializeComponent();
             this.MaximizeBox = false;
             this.CenterToScreen();
-        }
-        
+        }        
         private void usePchars_Click(object sender, EventArgs e)
         {
             txtbox_pw.UseSystemPasswordChar = false;
@@ -33,7 +32,6 @@ namespace Email
             usePchars.Visible = true;
             unusePchars.Visible = false;
         }
-
         private void btn_send_Click(object sender, EventArgs e)
         {
             login = txt_log.Text;
@@ -52,7 +50,6 @@ namespace Email
                 send.ShowDialog();
             }            
         }
-
         private void btn_check_Click(object sender, EventArgs e)
         {
             login = txt_log.Text;
@@ -68,7 +65,7 @@ namespace Email
             else
             {
                 Check check = new Check(login, password);
-                check.ShowDialog();
+                check.Show();
             }            
         }
     }

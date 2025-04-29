@@ -11,6 +11,7 @@ using System.Net;
 using System.Net.Mail;
 using OpenPop.Pop3;
 using OpenPop.Mime;
+using System.IO;
 
 
 namespace Email
@@ -31,6 +32,7 @@ namespace Email
             this.CenterToScreen();
             this.login = login;
             this.password = password;
+            lstEmails.FullRowSelect = true;
         }
         private void Check_Load(object sender, EventArgs e)
         {
@@ -43,6 +45,7 @@ namespace Email
                     pop3Client.Connect(pop3server, pop3port, true);
                     pop3Client.Authenticate(pop3login, pop3password);
                     int count = pop3Client.GetMessageCount();
+
                     if (count == 0)
                     {
                         pop3Client.Disconnect();
@@ -54,46 +57,64 @@ namespace Email
                         this.Dispose();
                         return;
                     }
+
                     messages.Clear();
+                    lstEmails.Items.Clear(); // Очистка ListView перед добавлением новых элементов
+
                     for (int i = count; i >= 1; i--)
                     {
                         OpenPop.Mime.Message message = pop3Client.GetMessage(i);
                         messages.Add(message);
                     }
-                    for (int i = 0; i < messages.Count; i++)
+
+                    lstEmails.View = View.Details;
+                    lstEmails.Columns.Add("От", 200);
+                    lstEmails.Columns.Add("Тема", 200);
+                    lstEmails.Columns.Add("Дата", 150);
+
+                    foreach (OpenPop.Mime.Message message in messages)
                     {
-                        OpenPop.Mime.Message message = messages[i];
                         string from = message.Headers.From.Address;
                         string subject = message.Headers.Subject;
-                        lstEmails.Items.Add($"{from} - {subject}");
-
+                        DateTime dateSent = message.Headers.DateSent;
+                        var item = new ListViewItem(from);
+                        item.SubItems.Add(subject);
+                        item.SubItems.Add(dateSent.ToString("dd.MM.yy"));
+                        lstEmails.Items.Add(item);
                     }
+
+
                     pop3Client.Disconnect();
                     MessageBox.Show(
-                            "Письма получены",
-                            "Info",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Information);
+                        "Письма получены",
+                        "Info",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
                 }
             }
             catch (Exception ex)
             {
                 this.Dispose();
                 MessageBox.Show(
-                            $"Ошибка: {ex.Message}",
-                            "Ошибка",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Error);
+                    $"Ошибка: {ex.Message}",
+                    "Ошибка",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
             }
-        }
-
+        }       
         private void lstEmails_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (lstEmails.SelectedIndex == -1) return;
+            if (lstEmails.SelectedIndices.Count == 0) return;
+
             txtEmailBody.Clear();
+            lstAttachments.Items.Clear(); // Очищаем список вложений
+
             try
-            {             
-                OpenPop.Mime.Message message = messages[lstEmails.SelectedIndex];
+            {
+                int selectedIndex = lstEmails.SelectedIndices[0];
+                OpenPop.Mime.Message message = messages[selectedIndex];
+
+                // Отображение тела письма (как и раньше)
                 MessagePart body = message.FindFirstPlainTextVersion();
                 if (body != null)
                 {
@@ -108,10 +129,52 @@ namespace Email
                         txtEmailBody.Text = "Сообщение не содержит текст.";
                 }
 
+                // Обработка вложений
+                foreach (var part in message.FindAllAttachments())
+                {
+                    lstAttachments.Items.Add(part.FileName); // Добавляем имя файла в список
+                                                             // Можно также сохранить MessagePart в какой-нибудь коллекции
+                                                             // для последующего использования (сохранения на диск)
+                }
+
+                if (lstAttachments.Items.Count == 0)
+                {
+                    lstAttachments.Items.Add("Нет вложений");
+                }
             }
             catch (Exception ex)
             {
                 txtEmailBody.Text = $"Ошибка: {ex.Message}";
+            }
+        }
+        private void lstAttachments_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (lstAttachments.SelectedIndex == -1 || lstAttachments.SelectedItem.ToString() == "Нет вложений") return;
+
+            try
+            {
+                int selectedEmailIndex = lstEmails.SelectedIndices[0]; // Получаем индекс выбранного письма
+                OpenPop.Mime.Message message = messages[selectedEmailIndex];
+
+                string selectedAttachmentName = lstAttachments.SelectedItem.ToString();
+
+                // Находим MessagePart, соответствующий выбранному вложению
+                foreach (var part in message.FindAllAttachments())
+                {
+                    if (part.FileName == selectedAttachmentName)
+                    {
+                        // Сохраняем вложение на диск
+                        string filePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), part.FileName);
+                        File.WriteAllBytes(filePath, part.Body);
+                        MessageBox.Show($"Вложение сохранено в: {filePath}", "Информация", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        //Можно добавить отображение изображения в PictureBox, если это изображение.
+                        break;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при сохранении вложения: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
     }
