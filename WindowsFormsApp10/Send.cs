@@ -1,7 +1,9 @@
 ﻿using System;
-using System.Net;
 using System.Net.Mail;
 using System.Windows.Forms;
+using MailKit.Net.Smtp;
+using MimeKit;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace Email
 {
@@ -26,34 +28,41 @@ namespace Email
                 txtStatus.Text = "Отправка..."; // Отображаем статус отправки
                 try
                 {
-                    // Создаем экземпляр SMTP клиента
-                    using (SmtpClient smtp = new SmtpClient(smtpserver, smtpPort))
+                    using (var smtp = new MailKit.Net.Smtp.SmtpClient())
                     {
-                        // Устанавливаем учетные данные
-                        smtp.Credentials = new NetworkCredential(login, password);
-                        // Устанавливаем метод доставки
-                        smtp.DeliveryMethod = SmtpDeliveryMethod.Network;
-                        // Включаем SSL
-                        smtp.EnableSsl = true;
-                        // Создаем экземпляр сообщения
-                        using (MailMessage message = new MailMessage(login, txtTo.Text, txtSubject.Text, txtBody.Text))
+                        smtp.ServerCertificateValidationCallback = (s, cert, chain, sslError) => true;
+                        await smtp.ConnectAsync(smtpserver, smtpPort, true);
+                        await smtp.AuthenticateAsync(login, password);
+                        using (MimeMessage message = new MimeMessage())
                         {
-                            // Если есть прикрепленный файл
-                            if (!string.IsNullOrEmpty(attachFile))
-                                message.Attachments.Add(new Attachment(attachFile)); // Добавляем вложение
-                            // Отправляем сообщение асинхронно
-                            await smtp.SendMailAsync(message);
+                            message.From.Add(new MailboxAddress("", login));
+                            if (!string.IsNullOrEmpty(txtTo.Text))
+                                message.To.Add(new MailboxAddress("", txtTo.Text));
+                            message.Subject = txtSubject.Text ?? string.Empty;
+                            var builder = new BodyBuilder();
+                            builder.TextBody = txtBody.Text ?? string.Empty;
+                            // Добавляем вложения
+                            foreach (var attachment in lstFiles.Items)
+                            {
+                                if (!string.IsNullOrEmpty(attachment.ToString()))
+                                {
+                                    builder.Attachments.Add(attachment.ToString());
+                                }
+                            }
+                            message.Body = builder.ToMessageBody();
+                            await smtp.SendAsync(message);
                         }
-                        txtStatus.Text = "Письмо отправлено!"; // Отображаем статус отправки
+                        await smtp.DisconnectAsync(true);
+                        txtStatus.Text = ("Email sent successfully!");
                     }
                 }
-                catch (SmtpException ex)
+                catch (SmtpCommandException ex)
                 {
-                    txtStatus.Text = $"Ошибка отправки письма: {ex.Message}"; // Отображаем сообщение об ошибке отправки
+                    txtStatus.Text = ($"SMTP Error: {ex.StatusCode} - {ex.Message}");
                 }
                 catch (Exception ex)
                 {
-                    txtStatus.Text = $"Непредвиденная ошибка: {ex.Message}"; // Отображаем сообщение о непредвиденной ошибке
+                    txtStatus.Text = ($"Error: {ex.GetType().Name} - {ex.Message}");
                 }
             }
         }
